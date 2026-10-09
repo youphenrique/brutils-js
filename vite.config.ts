@@ -4,7 +4,7 @@ export default defineConfig({
   staged: {
     "*": "vp check --fix",
   },
-  // Spec fixtures keep invisible characters as \uXXXX escapes, which the formatter would decode.
-  fmt: { ignorePatterns: ["spec/**/*.json"] },
+  // spec/ is the brutils-spec submodule: its files are edited there, and its \uXXXX escapes must not be decoded.
+  fmt: { ignorePatterns: ["spec/**"] },
   lint: { options: { typeAware: true, typeCheck: true } },
 });

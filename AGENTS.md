@@ -29,6 +29,10 @@ validation, formatting, and generation. The core of the project is the `@brutils
 - `packages/cep-resolver/`: CEP → address lookup via third-party providers (network I/O). Kept out of core so
   provider changes never affect core's semver contract.
 - `apps/docs/`: Planned documentation website.
+- `spec/`: Git submodule of [brutils-spec](https://github.com/youphenrique/brutils-spec), the language-neutral
+  conformance cases shared with brutils-kotlin. Tests import them (e.g. `spec/cpf/cases.json`); change cases in that
+  repository, then move the submodule pointer here. Clone with `--recurse-submodules` or run
+  `git submodule update --init`.
 
 ---
 
