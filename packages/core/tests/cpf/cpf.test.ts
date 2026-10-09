@@ -4,19 +4,10 @@ import { cpf } from "../../src/index.ts";
 import { CpfError } from "../../src/utilities/cpf";
 import * as cpfUtils from "../../src/utilities/cpf/utils.ts";
 
-// Fixed fixtures, independent of generate(). Remainders are the mod-11 sums behind each check digit;
-// 0 and 1 both yield a zero check digit, so the table covers that boundary for each position.
-const fixtures = [
-  { raw: "12345678909", formatted: "123.456.789-09", remainders: [1, 2] },
-  { raw: "52263944621", formatted: "522.639.446-21", remainders: [9, 10] },
-  { raw: "00000000191", formatted: "000.000.001-91", remainders: [2, 10] },
-  { raw: "00000000515", formatted: "000.000.005-15", remainders: [10, 6] },
-  { raw: "00000000604", formatted: "000.000.006-04", remainders: [1, 7] },
-  { raw: "00000000949", formatted: "000.000.009-49", remainders: [7, 2] },
-  { raw: "00000001406", formatted: "000.000.014-06", remainders: [0, 5] },
-  { raw: "00000001830", formatted: "000.000.018-30", remainders: [8, 1] },
-  { raw: "00000001910", formatted: "000.000.019-10", remainders: [10, 0] },
-] as const;
+import spec from "../../../../spec/cpf/cases.json" with { type: "json" };
+
+// Language-neutral cases shared with other brutils implementations; see spec/README.md.
+const fixtures = spec.valid.cases;
 
 function mockRandomDigits(digits: string) {
   const randomSpy = vi.spyOn(Math, "random");
@@ -27,15 +18,18 @@ function mockRandomDigits(digits: string) {
 }
 
 describe("CPF checksum conformance", () => {
-  it.each(fixtures)("accepts $raw and its canonical representation", ({ raw, formatted }) => {
-    for (const value of [raw, formatted]) {
-      expect(cpf.validate(value)).toEqual({ success: true, error: null });
-      expect(cpf.normalize(value)).toBe(raw);
-      expect(cpf.format(value)).toBe(formatted);
-      expect(cpf.formatAsYouType(value)).toBe(formatted);
-      expect(cpf.mask(value)).toBe(`***.***.***-${raw.slice(-2)}`);
-    }
-  });
+  it.each(fixtures)(
+    "accepts $raw and its canonical representation",
+    ({ raw, formatted, masked }) => {
+      for (const value of [raw, formatted]) {
+        expect(cpf.validate(value)).toEqual({ success: true, error: null });
+        expect(cpf.normalize(value)).toBe(raw);
+        expect(cpf.format(value)).toBe(formatted);
+        expect(cpf.formatAsYouType(value)).toBe(formatted);
+        expect(cpf.mask(value)).toBe(masked);
+      }
+    },
+  );
 
   it.each(fixtures)("rejects independent corruption of either check digit of $raw", ({ raw }) => {
     for (const position of [9, 10]) {
@@ -46,49 +40,30 @@ describe("CPF checksum conformance", () => {
           const result = cpf.validate(value);
           expect(result.success).toBe(false);
           expect(result.error).toBeInstanceOf(CpfError);
-          expect(result.error?.code).toBe("INVALID_CHECKSUM");
+          expect(result.error?.code).toBe(spec.checkDigitCorruption.errorCode);
         }
       }
     }
   });
 
-  it.each(Array.from("0123456789"))("rejects all-%s digits in either shape", (digit) => {
-    const raw = digit.repeat(11);
+  it.each(spec.repeatedDigits.cases)("rejects %s in either shape", (raw) => {
     for (const value of [raw, cpf.format(raw)]) {
-      expect(cpf.validate(value).error?.code).toBe("REPEATED_DIGITS");
+      expect(cpf.validate(value).error?.code).toBe(spec.repeatedDigits.errorCode);
     }
   });
 });
 
 describe("CPF public input matrix", () => {
-  const cases = [
-    { value: "", digits: "", display: "" },
-    { value: "123", digits: "123", display: "123" },
-    { value: "abc", digits: "", display: "" },
-    { value: "1234567890", digits: "1234567890", display: "123.456.789-0" },
-    { value: "123.456.789-0", digits: "1234567890", display: "123.456.789-0" },
-    { value: "123456789091", digits: "123456789091", display: "123.456.789-09" },
-    { value: "123.456.789-09123", digits: "12345678909123", display: "123.456.789-09" },
-    { value: "123.456789-09", digits: "12345678909", display: "123.456.789-09" },
-    { value: "123-456.789.09", digits: "12345678909", display: "123.456.789-09" },
-    { value: "123.456.789.09", digits: "12345678909", display: "123.456.789-09" },
-    { value: "123a45678909", digits: "12345678909", display: "123.456.789-09" },
-    { value: " 12345678909 ", digits: "12345678909", display: "123.456.789-09" },
-    { value: "123 456\t78909", digits: "12345678909", display: "123.456.789-09" },
-    { value: "12345678909\n", digits: "12345678909", display: "123.456.789-09" },
-    { value: "123.456.789-09\r\n", digits: "12345678909", display: "123.456.789-09" },
-    { value: "１２３４５６７８９０９", digits: "", display: "" },
-    { value: "١٢٣٤٥٦٧٨٩٠٩", digits: "", display: "" },
-    { value: "１2345678909", digits: "2345678909", display: "234.567.890-9" },
-  ];
-
-  it.each(cases)("applies each malformed-string policy to $value", ({ value, digits, display }) => {
-    expect(cpf.normalize(value)).toBe(digits);
-    expect(cpf.format(value)).toBe(value);
-    expect(cpf.mask(value)).toBeNull();
-    expect(cpf.formatAsYouType(value)).toBe(display);
-    expect(cpf.validate(value).error?.code).toBe("INVALID_FORMAT");
-  });
+  it.each(spec.malformed.cases)(
+    "applies each malformed-string policy to $input",
+    ({ input, normalized, asYouType }) => {
+      expect(cpf.normalize(input)).toBe(normalized);
+      expect(cpf.format(input)).toBe(input);
+      expect(cpf.mask(input)).toBeNull();
+      expect(cpf.formatAsYouType(input)).toBe(asYouType);
+      expect(cpf.validate(input).error?.code).toBe(spec.malformed.errorCode);
+    },
+  );
 
   it.each(
     [
@@ -119,13 +94,15 @@ describe("CPF public input matrix", () => {
     expect(result.error?.code).toBe("INVALID_TYPE");
   });
 
-  it("formats and masks a bad checksum without claiming validity", () => {
-    expect(cpf.format("12345678900")).toBe("123.456.789-00");
-    expect(cpf.format("123.456.789-00")).toBe("123.456.789-00");
-    expect(cpf.normalize("123.456.789-00")).toBe("12345678900");
-    expect(cpf.mask("123.456.789-00")).toBe("***.***.***-00");
-    expect(cpf.validate("123.456.789-00").error?.code).toBe("INVALID_CHECKSUM");
-  });
+  it.each(spec.badChecksum.cases)(
+    "formats and masks bad checksum $input without claiming validity",
+    ({ input, normalized, formatted, masked }) => {
+      expect(cpf.format(input)).toBe(formatted);
+      expect(cpf.normalize(input)).toBe(normalized);
+      expect(cpf.mask(input)).toBe(masked);
+      expect(cpf.validate(input).error?.code).toBe(spec.badChecksum.errorCode);
+    },
+  );
 });
 
 describe("cpf.mask", () => {
@@ -135,36 +112,26 @@ describe("cpf.mask", () => {
     expect(cpf.mask("29650899006", undefined)).toBe("***.***.***-06");
   });
 
-  it("applies each mode to raw and canonical input without checking the checksum", () => {
-    const cases = [
-      ["suffix", "***.***.***-06", "***.***.***-00"],
-      ["prefix-suffix", "296.***.***-06", "123.***.***-00"],
-      ["redacted", "***.***.***-**", "***.***.***-**"],
-    ] as const;
+  it.each(spec.mask.modes)(
+    "applies $mode to $input without checking the checksum",
+    ({ input, mode, expected }) => {
+      expect(cpf.mask(input, { mode: mode as cpf.CpfMaskMode })).toBe(expected);
+    },
+  );
 
-    for (const [mode, validExpected, badChecksumExpected] of cases) {
-      expect(cpf.mask("29650899006", { mode })).toBe(validExpected);
-      expect(cpf.mask("296.508.990-06", { mode })).toBe(validExpected);
-      expect(cpf.mask("12345678900", { mode })).toBe(badChecksumExpected);
-      expect(cpf.mask("123.456.789-00", { mode })).toBe(badChecksumExpected);
-    }
-  });
-
-  it("replaces every hidden digit with a custom character", () => {
-    expect(cpf.mask("29650899006", { char: "#" })).toBe("###.###.###-06");
-    expect(cpf.mask("29650899006", { char: "#", mode: "prefix-suffix" })).toBe("296.###.###-06");
-    expect(cpf.mask("29650899006", { char: "#", mode: "redacted" })).toBe("###.###.###-##");
-    expect(cpf.mask("29650899006", { char: "🔒", mode: "redacted" })).toBe(
-      "🔒🔒🔒.🔒🔒🔒.🔒🔒🔒-🔒🔒",
-    );
-  });
+  it.each(spec.mask.customChar)(
+    "replaces every hidden digit with $char in $mode mode",
+    ({ input, char, mode, expected }) => {
+      expect(cpf.mask(input, { char, mode: mode as cpf.CpfMaskMode })).toBe(expected);
+    },
+  );
 
   it("rejects invalid options containers and values with descriptive TypeErrors", () => {
     for (const options of [null, [], "redacted", 1]) {
       expect(() => cpf.mask("29650899006", options as never)).toThrow(/Expected an options object/);
     }
 
-    for (const mode of ["redact", "", 0, null, false]) {
+    for (const mode of [...spec.mask.invalidModes, 0, null, false]) {
       expect(() => cpf.mask("29650899006", { mode } as never)).toThrow(/Expected CPF mask mode/);
     }
 
@@ -173,31 +140,10 @@ describe("cpf.mask", () => {
     );
     expect(() => cpf.mask("29650899006", { char: 1 } as never)).toThrow(/but received number$/);
 
-    for (const char of [
-      "",
-      "##",
-      "🔒️",
-      "0",
-      "١",
-      "Ⅷ",
-      " ",
-      "\t",
-      " ",
-      "́",
-      "‍",
-      "\u0000",
-      "\ud800",
-      "\udc00",
-      "ㅤ",
-      "ﾠ",
-      "⠀",
-      "",
-      "͸",
-      ".",
-      "-",
-      1,
-      null,
-    ]) {
+    const loneSurrogates = spec.mask.invalidCharsUtf16.cases.map((units) =>
+      String.fromCharCode(...units),
+    );
+    for (const char of [...spec.mask.invalidChars.cases, ...loneSurrogates, 1, null]) {
       expect(() => cpf.mask("29650899006", { char } as never)).toThrow(/Expected CPF mask char/);
     }
   });
@@ -342,20 +288,12 @@ describe("cpf.generate", () => {
 });
 
 describe("cpf.formatAsYouType", () => {
-  it.each([
-    ["5", "5"],
-    ["52", "52"],
-    ["522", "522"],
-    ["5226", "522.6"],
-    ["52263", "522.63"],
-    ["522639", "522.639"],
-    ["5226394", "522.639.4"],
-    ["52263944", "522.639.44"],
-    ["522639446", "522.639.446"],
-    ["5226394462", "522.639.446-2"],
-  ])("inserts separators at each boundary for %s", (input, expected) => {
-    expect(cpf.formatAsYouType(input)).toBe(expected);
-  });
+  it.each(spec.formatAsYouType.cases)(
+    "inserts separators at each boundary for $input",
+    ({ input, expected }) => {
+      expect(cpf.formatAsYouType(input)).toBe(expected);
+    },
+  );
 });
 
 // CPF scope of #34 and #38; constants remain public pending the broader API audit.

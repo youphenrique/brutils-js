@@ -1,0 +1,208 @@
+{
+  "module": "cpf",
+  "specVersion": 1,
+  "errorCodes": ["INVALID_TYPE", "INVALID_FORMAT", "REPEATED_DIGITS", "INVALID_CHECKSUM"],
+  "maskModes": ["suffix", "prefix-suffix", "redacted"],
+  "valid": {
+    "description": "Valid CPFs. Each must validate, normalize, format, format as you type and mask identically from both raw and formatted input. remainders are the mod-11 sums behind each check digit; 0 and 1 both yield a zero check digit, so the table covers that boundary for each position. Generating from the base raw[0..9] must yield raw.",
+    "cases": [
+      {
+        "raw": "12345678909",
+        "formatted": "123.456.789-09",
+        "masked": "***.***.***-09",
+        "remainders": [1, 2]
+      },
+      {
+        "raw": "52263944621",
+        "formatted": "522.639.446-21",
+        "masked": "***.***.***-21",
+        "remainders": [9, 10]
+      },
+      {
+        "raw": "00000000191",
+        "formatted": "000.000.001-91",
+        "masked": "***.***.***-91",
+        "remainders": [2, 10]
+      },
+      {
+        "raw": "00000000515",
+        "formatted": "000.000.005-15",
+        "masked": "***.***.***-15",
+        "remainders": [10, 6]
+      },
+      {
+        "raw": "00000000604",
+        "formatted": "000.000.006-04",
+        "masked": "***.***.***-04",
+        "remainders": [1, 7]
+      },
+      {
+        "raw": "00000000949",
+        "formatted": "000.000.009-49",
+        "masked": "***.***.***-49",
+        "remainders": [7, 2]
+      },
+      {
+        "raw": "00000001406",
+        "formatted": "000.000.014-06",
+        "masked": "***.***.***-06",
+        "remainders": [0, 5]
+      },
+      {
+        "raw": "00000001830",
+        "formatted": "000.000.018-30",
+        "masked": "***.***.***-30",
+        "remainders": [8, 1]
+      },
+      {
+        "raw": "00000001910",
+        "formatted": "000.000.019-10",
+        "masked": "***.***.***-10",
+        "remainders": [10, 0]
+      }
+    ]
+  },
+  "checkDigitCorruption": {
+    "description": "Derived cases: for every valid case, replacing either check digit (index 9 or 10) with any other digit must fail validation with errorCode, in both raw and formatted shape.",
+    "errorCode": "INVALID_CHECKSUM"
+  },
+  "repeatedDigits": {
+    "description": "Eleven identical digits must fail validation with errorCode, in both raw and formatted shape.",
+    "errorCode": "REPEATED_DIGITS",
+    "cases": [
+      "00000000000",
+      "11111111111",
+      "22222222222",
+      "33333333333",
+      "44444444444",
+      "55555555555",
+      "66666666666",
+      "77777777777",
+      "88888888888",
+      "99999999999"
+    ]
+  },
+  "malformed": {
+    "description": "Strings that are neither raw digits nor the canonical mask. For each: normalize returns normalized, format returns the input unchanged, mask returns null, formatAsYouType returns asYouType, and validation fails with errorCode. Only ASCII digits count as digits.",
+    "errorCode": "INVALID_FORMAT",
+    "cases": [
+      { "input": "", "normalized": "", "asYouType": "" },
+      { "input": "123", "normalized": "123", "asYouType": "123" },
+      { "input": "abc", "normalized": "", "asYouType": "" },
+      { "input": "1234567890", "normalized": "1234567890", "asYouType": "123.456.789-0" },
+      { "input": "123.456.789-0", "normalized": "1234567890", "asYouType": "123.456.789-0" },
+      { "input": "123456789091", "normalized": "123456789091", "asYouType": "123.456.789-09" },
+      {
+        "input": "123.456.789-09123",
+        "normalized": "12345678909123",
+        "asYouType": "123.456.789-09"
+      },
+      { "input": "123.456789-09", "normalized": "12345678909", "asYouType": "123.456.789-09" },
+      { "input": "123-456.789.09", "normalized": "12345678909", "asYouType": "123.456.789-09" },
+      { "input": "123.456.789.09", "normalized": "12345678909", "asYouType": "123.456.789-09" },
+      { "input": "123a45678909", "normalized": "12345678909", "asYouType": "123.456.789-09" },
+      { "input": " 12345678909 ", "normalized": "12345678909", "asYouType": "123.456.789-09" },
+      { "input": "123 456\t78909", "normalized": "12345678909", "asYouType": "123.456.789-09" },
+      { "input": "12345678909\n", "normalized": "12345678909", "asYouType": "123.456.789-09" },
+      { "input": "123.456.789-09\r\n", "normalized": "12345678909", "asYouType": "123.456.789-09" },
+      { "input": "１２３４５６７８９０９", "normalized": "", "asYouType": "" },
+      { "input": "١٢٣٤٥٦٧٨٩٠٩", "normalized": "", "asYouType": "" },
+      { "input": "１2345678909", "normalized": "2345678909", "asYouType": "234.567.890-9" }
+    ]
+  },
+  "badChecksum": {
+    "description": "Well-formed CPFs with a wrong check digit. format, normalize and mask work without claiming validity; validation fails with errorCode.",
+    "errorCode": "INVALID_CHECKSUM",
+    "cases": [
+      {
+        "input": "12345678900",
+        "normalized": "12345678900",
+        "formatted": "123.456.789-00",
+        "masked": "***.***.***-00"
+      },
+      {
+        "input": "123.456.789-00",
+        "normalized": "12345678900",
+        "formatted": "123.456.789-00",
+        "masked": "***.***.***-00"
+      }
+    ]
+  },
+  "formatAsYouType": {
+    "description": "Separators are inserted at each boundary as digits are typed.",
+    "cases": [
+      { "input": "5", "expected": "5" },
+      { "input": "52", "expected": "52" },
+      { "input": "522", "expected": "522" },
+      { "input": "5226", "expected": "522.6" },
+      { "input": "52263", "expected": "522.63" },
+      { "input": "522639", "expected": "522.639" },
+      { "input": "5226394", "expected": "522.639.4" },
+      { "input": "52263944", "expected": "522.639.44" },
+      { "input": "522639446", "expected": "522.639.446" },
+      { "input": "5226394462", "expected": "522.639.446-2" }
+    ]
+  },
+  "mask": {
+    "description": "Masking does not check the checksum. Omitted options default to mode \"suffix\" and char \"*\". Options are validated before the input, so invalid options fail even for malformed input.",
+    "modes": [
+      { "input": "29650899006", "mode": "suffix", "expected": "***.***.***-06" },
+      { "input": "296.508.990-06", "mode": "suffix", "expected": "***.***.***-06" },
+      { "input": "12345678900", "mode": "suffix", "expected": "***.***.***-00" },
+      { "input": "123.456.789-00", "mode": "suffix", "expected": "***.***.***-00" },
+      { "input": "29650899006", "mode": "prefix-suffix", "expected": "296.***.***-06" },
+      { "input": "296.508.990-06", "mode": "prefix-suffix", "expected": "296.***.***-06" },
+      { "input": "12345678900", "mode": "prefix-suffix", "expected": "123.***.***-00" },
+      { "input": "123.456.789-00", "mode": "prefix-suffix", "expected": "123.***.***-00" },
+      { "input": "29650899006", "mode": "redacted", "expected": "***.***.***-**" },
+      { "input": "296.508.990-06", "mode": "redacted", "expected": "***.***.***-**" },
+      { "input": "12345678900", "mode": "redacted", "expected": "***.***.***-**" },
+      { "input": "123.456.789-00", "mode": "redacted", "expected": "***.***.***-**" }
+    ],
+    "customChar": [
+      { "input": "29650899006", "char": "#", "mode": "suffix", "expected": "###.###.###-06" },
+      {
+        "input": "29650899006",
+        "char": "#",
+        "mode": "prefix-suffix",
+        "expected": "296.###.###-06"
+      },
+      { "input": "29650899006", "char": "#", "mode": "redacted", "expected": "###.###.###-##" },
+      {
+        "input": "29650899006",
+        "char": "🔒",
+        "mode": "redacted",
+        "expected": "🔒🔒🔒.🔒🔒🔒.🔒🔒🔒-🔒🔒"
+      }
+    ],
+    "invalidModes": ["redact", ""],
+    "invalidChars": {
+      "description": "char must be exactly one visible, non-digit, non-separator grapheme made of a single code point.",
+      "cases": [
+        "",
+        "##",
+        "\ud83d\udd12\ufe0f",
+        "0",
+        "\u0661",
+        "\u2167",
+        " ",
+        "\t",
+        "\u00a0",
+        "\u0301",
+        "\u200d",
+        "\u0000",
+        "\u3164",
+        "\uffa0",
+        "\u2800",
+        "\ue000",
+        "\u0378",
+        ".",
+        "-"
+      ]
+    },
+    "invalidCharsUtf16": {
+      "description": "Lone surrogates, given as UTF-16 code units because strict JSON parsers reject them as escapes. Only applies to implementations whose strings are UTF-16 (JavaScript, JVM); each must be rejected as char.",
+      "cases": [[55296], [56320]]
+    }
+  }
+}
